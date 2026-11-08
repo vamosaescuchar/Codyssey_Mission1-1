@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>우리끼리 영화 티어리스트</title>
+<style>
+:root{
+  --bg:#f6f3ee; --panel:#ffffff; --ink:#23201c; --muted:#7a7268; --line:#ddd6cb;
+  --card:#ffffff; --cardline:#c9c0b2; --accent:#d8453a;
+  --t-GOAT:#ffd978; --t-S:#ffb3a7; --t-A:#ffd3a3; --t-B:#c9e4a8; --t-C:#a9cfe8; --tier-ink:#2b2620;
+}
+:root[data-theme="dark"]{
+  --bg:#16171b; --panel:#202228; --ink:#eceae5; --muted:#9a9a9f; --line:#33353d;
+  --card:#2c2f38; --cardline:#464a56; --accent:#ff6b5e;
+  --t-GOAT:#d9a93a; --t-S:#d86c5c; --t-A:#d78f4c; --t-B:#7fa855; --t-C:#5b8fb3; --tier-ink:#14120f;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;line-height:1.5;transition:background .2s,color .2s}
+.wrap{max-width:960px;margin:0 auto;padding:20px 14px 48px}
+header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px}
+h1{margin:0;font-size:clamp(26px,5vw,38px);font-weight:900;letter-spacing:-.02em;line-height:1.15}
+.sub{margin:4px 0 0;color:var(--muted);font-size:14px}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:10px;padding:9px 14px;font-weight:600}
+button:hover{border-color:var(--ink)}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.primary:hover{border-color:var(--accent);filter:brightness(1.08)}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.add{display:flex;gap:8px;flex:1 1 280px}
+.add input{flex:1;min-width:0;font:inherit;padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+#tiers{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel)}
+.row{display:flex;border-bottom:1px solid var(--line);min-height:72px}
+.row:last-child{border-bottom:0}
+.label{flex:0 0 76px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:22px;color:var(--tier-ink)}
+.label.goat{font-size:17px}
+.zone{flex:1;display:flex;flex-wrap:wrap;gap:8px;padding:8px;align-content:flex-start;min-height:72px;transition:background .15s}
+.zone.over{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+#pool{margin-top:18px;border:1px dashed var(--cardline);border-radius:14px;padding:10px;background:var(--panel)}
+#pool h2{margin:2px 4px 8px;font-size:15px;font-weight:700}
+#pool .zone{padding:0;min-height:48px}
+.empty{color:var(--muted);font-size:14px;padding:12px 4px}
+.card{display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--cardline);border-radius:9px;padding:9px 6px 9px 12px;font-size:15px;font-weight:600;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;max-width:100%}
+.card span{overflow-wrap:anywhere}
+.card.drag-src{opacity:.28}
+.card .x{border:0;background:none;padding:0 6px;color:var(--muted);font-size:17px;line-height:1;cursor:pointer;border-radius:6px;font-weight:400}
+.card .x:hover{color:var(--accent)}
+.ghost{position:fixed;z-index:50;pointer-events:none;box-shadow:0 10px 26px rgba(0,0,0,.28);transform:rotate(-2deg);cursor:grabbing}
+.hint{margin-top:14px;color:var(--muted);font-size:13px}
+@media (max-width:560px){.label{flex-basis:58px;font-size:19px}.label.goat{font-size:13px}.card{font-size:14px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>우리끼리 영화 티어리스트</h1>
+      <p class="sub">영화를 끌어서 등급에 놓고, 친구들과 이야기해 보세요.</p>
+    </div>
+    <button id="themeBtn" aria-label="테마 바꾸기">다크 모드</button>
+  </header>
+
+  <div class="toolbar">
+    <div class="add">
+      <input id="newTitle" type="text" maxlength="40" placeholder="추가할 영화 제목" aria-label="추가할 영화 제목">
+      <button id="addBtn" class="primary">영화 추가</button>
+    </div>
+    <button id="saveBtn">이미지로 저장</button>
+    <button id="resetBtn">전체 초기화</button>
+  </div>
+
+  <div id="tiers"></div>
+
+  <div id="pool">
+    <h2>아직 분류하지 않은 영화</h2>
+    <div class="zone" data-zone="pool"></div>
+  </div>
+  <p class="hint">카드를 끌어서 놓으면 자동으로 저장돼요. 카드 오른쪽 ×를 누르면 영화가 삭제돼요.</p>
+</div>
+
+<script>
+const TIERS = ["GOAT","S","A","B","C"];
+const DEFAULT_MOVIES = ["기생충","인터스텔라","라라랜드","센과 치히로의 행방불명","어벤져스: 엔드게임","범죄도시","타이타닉","토이 스토리"];
+const KEY = "movieTierList.v1";
+const THEME_KEY = "movieTierList.theme";
+let state;
+
+function freshState(){
+  const s = {movies:{}, zones:{pool:[]}, nextId:1};
+  TIERS.forEach(t => s.zones[t] = []);
+  DEFAULT_MOVIES.forEach(title => { const id = "m" + s.nextId++; s.movies[id] = title; s.zones.pool.push(id); });
+  return s;
+}
+function load(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(raw){
+      const s = JSON.parse(raw);
+      if(s && s.movies && s.zones){ TIERS.concat("pool").forEach(z => { if(!Array.isArray(s.zones[z])) s.zones[z] = []; }); return s; }
+    }
+  }catch(e){}
+  return freshState();
+}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+
+/* ---------- 화면 그리기 ---------- */
+const tiersEl = document.getElementById("tiers");
+const poolZone = document.querySelector('#pool .zone');
+
+function makeCard(id){
+  const c = document.createElement("div");
+  c.className = "card"; c.dataset.id = id;
+  const sp = document.createElement("span"); sp.textContent = state.movies[id];
+  const x = document.createElement("button"); x.className = "x"; x.type = "button";
+  x.textContent = "×"; x.setAttribute("aria-label", state.movies[id] + " 삭제");
+  x.addEventListener("pointerdown", e => e.stopPropagation());
+  x.addEventListener("click", () => removeMovie(id));
+  c.append(sp, x);
+  c.addEventListener("pointerdown", startDrag);
+  return c;
+}
+function render(){
+  tiersEl.innerHTML = "";
+  TIERS.forEach(t => {
+    const row = document.createElement("div"); row.className = "row";
+    const lb = document.createElement("div"); lb.className = "label" + (t === "GOAT" ? " goat" : "");
+    lb.textContent = t; lb.style.background = "var(--t-" + t + ")";
+    const z = document.createElement("div"); z.className = "zone"; z.dataset.zone = t;
+    state.zones[t].forEach(id => z.appendChild(makeCard(id)));
+    row.append(lb, z); tiersEl.appendChild(row);
+  });
+  poolZone.innerHTML = "";
+  state.zones.pool.forEach(id => poolZone.appendChild(makeCard(id)));
+  if(!state.zones.pool.length){
+    const e = document.createElement("div"); e.className = "empty";
+    e.textContent = "모든 영화를 분류했어요. 위 입력창에서 영화를 더 추가할 수 있어요.";
+    poolZone.appendChild(e);
+  }
+}
+
+/* ---------- 추가 / 삭제 / 초기화 ---------- */
+function addMovie(){
+  const input = document.getElementById("newTitle");
+  const title = input.value.trim();
+  if(!title){ input.focus(); return; }
+  const dup = Object.values(state.movies).some(t => t === title);
+  if(dup && !confirm("'" + title + "' 영화가 이미 있어요. 그래도 추가할까요?")) return;
+  const id = "m" + state.nextId++;
+  state.movies[id] = title; state.zones.pool.push(id);
+  input.value = ""; save(); render(); input.focus();
+}
+function removeMovie(id){
+  if(!confirm("'" + state.movies[id] + "'을(를) 삭제할까요?")) return;
+  delete state.movies[id];
+  Object.keys(state.zones).forEach(z => state.zones[z] = state.zones[z].filter(i => i !== id));
+  save(); render();
+}
+document.getElementById("addBtn").addEventListener("click", addMovie);
+document.getElementById("newTitle").addEventListener("keydown", e => { if(e.key === "Enter" && !e.isComposing) addMovie(); });
+document.getElementById("resetBtn").addEventListener("click", () => {
+  if(!confirm("분류 결과와 추가한 영화가 모두 처음 상태로 돌아가요. 계속할까요?")) return;
+  state = freshState(); save(); render();
+});
+
+/* ---------- 드래그 앤 드롭 (마우스·터치 공통) ---------- */
+let drag = null;
+function startDrag(e){
+  if(e.button !== undefined && e.button !== 0) return;
+  const card = e.currentTarget, r = card.getBoundingClientRect();
+  drag = {id:card.dataset.id, src:card, dx:e.clientX - r.left, dy:e.clientY - r.top, ghost:null, moved:false, sx:e.clientX, sy:e.clientY, zone:null};
+  window.addEventListener("pointermove", moveDrag);
+  window.addEventListener("pointerup", endDrag);
+  window.addEventListener("pointercancel", cancelDrag);
+}
+function moveDrag(e){
+  if(!drag) return;
+  if(!drag.moved){
+    if(Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 5) return;
+    drag.moved = true;
+    const g = drag.src.cloneNode(true); g.classList.add("ghost");
+    g.style.width = drag.src.offsetWidth + "px";
+    document.body.appendChild(g); drag.ghost = g; drag.src.classList.add("drag-src");
+  }
+  e.preventDefault();
+  drag.ghost.style.left = (e.clientX - drag.dx) + "px";
+  drag.ghost.style.top = (e.clientY - drag.dy) + "px";
+  const z = zoneAt(e.clientX, e.clientY);
+  if(z !== drag.zone){ if(drag.zone) drag.zone.classList.remove("over"); if(z) z.classList.add("over"); drag.zone = z; }
+  // 화면 가장자리에서 자동 스크롤
+  if(e.clientY < 70) window.scrollBy(0,-12); else if(e.clientY > innerHeight - 70) window.scrollBy(0,12);
+}
+function zoneAt(x, y){
+  const el = document.elementFromPoint(x, y);
+  return el ? el.closest(".zone") : null;
+}
+function endDrag(e){
+  const d = drag; cleanup();
+  if(!d || !d.moved) return;
+  const z = zoneAt(e.clientX, e.clientY);
+  if(!z) return;
+  const name = z.dataset.zone;
+  // 놓을 위치 찾기
+  const cards = [...z.querySelectorAll(".card")].filter(c => c.dataset.id !== d.id);
+  let idx = cards.length;
+  for(let i = 0; i < cards.length; i++){
+    const r = cards[i].getBoundingClientRect();
+    if(e.clientY < r.top || (e.clientY <= r.bottom && e.clientX < r.left + r.width / 2)){ idx = i; break; }
+  }
+  const ids = cards.map(c => c.dataset.id);
+  Object.keys(state.zones).forEach(k => state.zones[k] = state.zones[k].filter(i => i !== d.id));
+  ids.splice(idx, 0, d.id);
+  // 이 영역의 순서를 화면 기준으로 다시 저장
+  state.zones[name] = ids;
+  save(); render();
+}
+function cancelDrag(){ cleanup(); }
+function cleanup(){
+  window.removeEventListener("pointermove", moveDrag);
+  window.removeEventListener("pointerup", endDrag);
+  window.removeEventListener("pointercancel", cancelDrag);
+  if(drag){
+    if(drag.ghost) drag.ghost.remove();
+    drag.src.classList.remove("drag-src");
+    if(drag.zone) drag.zone.classList.remove("over");
+  }
+  const d = drag; drag = null; return d;
+}
+
+/* ---------- 테마 ---------- */
+const themeBtn = document.getElementById("themeBtn");
+function applyTheme(t){
+  document.documentElement.dataset.theme = t;
+  themeBtn.textContent = t === "dark" ? "라이트 모드" : "다크 모드";
+}
+function initTheme(){
+  let t = null;
+  try{ t = localStorage.getItem(THEME_KEY); }catch(e){}
+  if(!t) t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  applyTheme(t);
+}
+themeBtn.addEventListener("click", () => {
+  const t = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  applyTheme(t);
+  try{ localStorage.setItem(THEME_KEY, t); }catch(e){}
+});
+
+/* ---------- 이미지로 저장 (캔버스에 직접 그리기) ---------- */
+function rrect(ctx, x, y, w, h, r){
+  ctx.beginPath(); ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function saveImage(){
+  const cs = getComputedStyle(document.documentElement);
+  const v = n => cs.getPropertyValue(n).trim();
+  const FONT = '"Pretendard","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif';
+  const W = 1000, LW = 120, PAD = 14, GAP = 10, CH = 46, HEAD = 96, SC = 2;
+  const probe = document.createElement("canvas").getContext("2d");
+  probe.font = "600 20px " + FONT;
+  const inner = W - LW - PAD * 2;
+
+  // 각 줄의 카드 배치 계산
+  const layouts = TIERS.map(t => {
+    const items = []; let x = 0, line = 0;
+    state.zones[t].forEach(id => {
+      const w = Math.min(inner, Math.ceil(probe.measureText(state.movies[id]).width) + 32);
+      if(x > 0 && x + w > inner){ x = 0; line++; }
+      items.push({title:state.movies[id], x, line, w}); x += w + GAP;
+    });
+    const lines = items.length ? line + 1 : 1;
+    return {t, items, h:Math.max(90, PAD * 2 + lines * CH + (lines - 1) * GAP)};
+  });
+  const H = HEAD + layouts.reduce((s, l) => s + l.h, 0) + 24;
+
+  const cv = document.createElement("canvas"); cv.width = W * SC; cv.height = H * SC;
+  const ctx = cv.getContext("2d"); ctx.scale(SC, SC);
+  ctx.fillStyle = v("--bg"); ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = v("--ink"); ctx.textBaseline = "middle"; ctx.textAlign = "left";
+  ctx.font = "900 38px " + FONT; ctx.fillText("우리끼리 영화 티어리스트", 24, 50);
+
+  let y = HEAD;
+  ctx.fillStyle = v("--panel"); rrect(ctx, 24, y, W - 48, H - HEAD - 24, 14); ctx.fill();
+  ctx.save(); rrect(ctx, 24, y, W - 48, H - HEAD - 24, 14); ctx.clip();
+  layouts.forEach((l, i) => {
+    ctx.fillStyle = v("--t-" + l.t); ctx.fillRect(24, y, LW - 24 + 24 - 24 + 0, l.h);
+    ctx.fillStyle = v("--tier-ink"); ctx.textAlign = "center";
+    ctx.font = "900 " + (l.t === "GOAT" ? 26 : 34) + "px " + FONT;
+    ctx.fillText(l.t, 24 + (LW - 24) / 2, y + l.h / 2);
+    if(i > 0){ ctx.fillStyle = v("--line"); ctx.fillRect(24, y, W - 48, 1); }
+    l.items.forEach(it => {
+      const cx = LW + PAD + it.x, cy = y + PAD + it.line * (CH + GAP);
+      ctx.fillStyle = v("--card"); rrect(ctx, cx, cy, it.w, CH, 10); ctx.fill();
+      ctx.strokeStyle = v("--cardline"); ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = v("--ink"); ctx.textAlign = "left"; ctx.font = "600 20px " + FONT;
+      let txt = it.title;
+      while(ctx.measureText(txt).width > it.w - 32 && txt.length > 1) txt = txt.slice(0, -1);
+      if(txt !== it.title) txt = txt.slice(0, -1) + "…";
+      ctx.fillText(txt, cx + 16, cy + CH / 2 + 1);
+    });
+    y += l.h;
+  });
+  ctx.restore();
+
+  cv.toBlob(blob => {
+    if(!blob){ alert("이미지를 만들지 못했어요. 다시 시도해 주세요."); return; }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = "영화-티어리스트.png";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }, "image/png");
+}
+document.getElementById("saveBtn").addEventListener("click", saveImage);
+
+/* ---------- 시작 ---------- */
+initTheme();
+state = load();
+render();
+</script>
+</body>
+</html>

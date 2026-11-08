@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>영화 티어리스트</title>
+    <!-- 화면 캡처용 라이브러리 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- 모바일 터치 드래그 앤 드롭 지원 라이브러리 -->
+    <script src="https://bernardo-castilho.github.io/DragDropTouch/DragDropTouch.js"></script>
+    <style>
+        /* 변수 설정 (라이트 모드 기본) */
+        :root {
+            --bg-color: #f5f6fa;
+            --text-color: #2f3640;
+            --board-bg: #dcdde1;
+            --pool-bg: #e1e2e6;
+            --card-bg: #ffffff;
+            --card-border: #7f8fa6;
+            --card-text: #2f3640;
+        }
+        /* 다크 모드 */
+        [data-theme="dark"] {
+            --bg-color: #2f3640;
+            --text-color: #f5f6fa;
+            --board-bg: #1e272e;
+            --pool-bg: #353b48;
+            --card-bg: #718093;
+            --card-border: #dcdde1;
+            --card-text: #ffffff;
+        }
+        
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Pretendard', 'Malgun Gothic', sans-serif;
+            margin: 0;
+            padding: 20px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        header h2 {
+            margin: 0;
+        }
+        
+        .controls button {
+            padding: 10px 16px;
+            margin-left: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.9rem;
+            transition: opacity 0.2s;
+        }
+        
+        .controls button:hover {
+            opacity: 0.8;
+        }
+        
+        #theme-toggle { background-color: #353b48; color: white; }
+        [data-theme="dark"] #theme-toggle { background-color: #f5f6fa; color: black; }
+        #download-btn { background-color: #0097e6; color: white; }
+        
+        #capture-area {
+            padding: 10px;
+            background-color: var(--bg-color);
+            border-radius: 10px;
+        }
+
+        #tier-board {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            background-color: var(--board-bg);
+            border: 2px solid var(--board-bg);
+        }
+        
+        .tier-row {
+            display: flex;
+            min-height: 90px;
+            background-color: var(--bg-color);
+            border-bottom: 2px solid var(--board-bg);
+        }
+        .tier-row:last-child {
+            border-bottom: none;
+        }
+        
+        .tier-label {
+            width: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            font-weight: 900;
+            color: #333;
+            flex-shrink: 0;
+            text-align: center;
+        }
+        
+        /* 티어별 색상 */
+        .tier-goat { background-color: #ff7f50; }
+        .tier-s { background-color: #ffc048; }
+        .tier-a { background-color: #ffdd59; }
+        .tier-b { background-color: #0be881; }
+        .tier-c { background-color: #4bcffa; }
+        
+        .tier-items {
+            flex-grow: 1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 10px;
+            align-items: center;
+            align-content: flex-start;
+        }
+        
+        .tier-items.drag-over {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+        [data-theme="dark"] .tier-items.drag-over {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        
+        .pool-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin-top: 30px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .pool-header h3 {
+            margin: 0;
+        }
+
+        .add-controls {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .add-controls input {
+            padding: 8px 12px;
+            border: 1px solid var(--card-border);
+            border-radius: 5px;
+            background-color: var(--card-bg);
+            color: var(--card-text);
+            font-family: inherit;
+        }
+        
+        .add-controls button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            background-color: #20bf6b;
+            color: white;
+            transition: opacity 0.2s;
+        }
+        
+        .add-controls button:hover {
+            opacity: 0.8;
+        }
+        
+        #movie-pool {
+            min-height: 120px;
+            background-color: var(--pool-bg);
+            padding: 15px;
+            border-radius: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-content: flex-start;
+        }
+        
+        /* 영화 카드 스타일 */
+        .movie-card {
+            background-color: var(--card-bg);
+            color: var(--card-text);
+            border: 2px solid var(--card-border);
+            border-radius: 8px;
+            padding: 12px 18px;
+            cursor: grab;
+            user-select: none;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: transform 0.1s;
+            position: relative; /* 삭제 버튼 위치 기준 */
+        }
+        
+        .movie-card:active {
+            cursor: grabbing;
+            transform: scale(0.95);
+        }
+        
+        .dragging {
+            opacity: 0.5;
+        }
+
+        /* 삭제 버튼 (X표시) */
+        .delete-btn {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 22px;
+            height: 22px;
+            background-color: #ff4757;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s, transform 0.1s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            z-index: 10;
+        }
+        
+        .delete-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .movie-card:hover .delete-btn {
+            opacity: 1;
+        }
+
+        /* 휴지통 영역 */
+        #trash-zone {
+            margin-top: 20px;
+            padding: 15px;
+            border: 2px dashed #eb3b5a;
+            border-radius: 10px;
+            color: #eb3b5a;
+            background-color: rgba(235, 59, 90, 0.05);
+            text-align: center;
+            font-weight: bold;
+            display: none; 
+        }
+        #trash-zone.drag-over {
+            background-color: rgba(235, 59, 90, 0.2);
+        }
+
+        @media (max-width: 600px) {
+            .tier-label {
+                width: 70px;
+                font-size: 1.1rem;
+            }
+            .movie-card {
+                padding: 8px 12px;
+                font-size: 0.9rem;
+            }
+            .pool-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            /* 모바일에서는 삭제버튼이 항상 보이도록 설정 */
+            .delete-btn {
+                opacity: 1;
+                width: 20px;
+                height: 20px;
+                font-size: 12px;
+                top: -5px;
+                right: -5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h2>🎬 영화 티어리스트</h2>
+        <div class="controls">
+            <button id="theme-toggle">라이트 모드</button>
+            <button id="download-btn">이미지 저장</button>
+        </div>
+    </header>
+    
+    <div id="capture-area">
+        <div id="tier-board">
+            <div class="tier-row"><div class="tier-label tier-goat">GOAT</div><div class="tier-items" data-tier="GOAT"></div></div>
+            <div class="tier-row"><div class="tier-label tier-s">S</div><div class="tier-items" data-tier="S"></div></div>
+            <div class="tier-row"><div class="tier-label tier-a">A</div><div class="tier-items" data-tier="A"></div></div>
+            <div class="tier-row"><div class="tier-label tier-b">B</div><div class="tier-items" data-tier="B"></div></div>
+            <div class="tier-row"><div class="tier-label tier-c">C</div><div class="tier-items" data-tier="C"></div></div>
+        </div>
+    </div>
+    
+    <div class="pool-header">
+        <h3>대기열 (분류할 영화)</h3>
+        <div class="add-controls">
+            <input type="text" id="new-movie-input" placeholder="새 영화 제목 입력...">
+            <button id="add-movie-btn">추가하기</button>
+        </div>
+    </div>
+    <div id="movie-pool" class="tier-items" data-tier="POOL"></div>
+
+    <div id="trash-zone">🗑️ 여기에 카드를 놓으면 삭제됩니다</div>
+
+    <script>
+        // 초기 영화 목록
+        const defaultMovies = [
+            '기생충', '인터스텔라', '라라랜드', '센과 치히로의 행방불명', 
+            '어벤져스: 엔드게임', '범죄도시', '타이타닉', '토이 스토리'
+        ];
+        
+        // 다크모드/라이트모드 초기화
+        function initTheme() {
+            const savedTheme = localStorage.getItem('tierTheme') || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            updateThemeButton(savedTheme);
+        }
+        
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('tierTheme', next);
+            updateThemeButton(next);
+        }
+        
+        function updateThemeButton(theme) {
+            document.getElementById('theme-toggle').innerText = theme === 'dark' ? '라이트 모드' : '다크 모드';
+        }
+        
+        // 상태 저장
+        function saveState() {
+            const state = {};
+            document.querySelectorAll('.tier-items').forEach(container => {
+                const tier = container.getAttribute('data-tier');
+                // 삭제 버튼 등 span 태그 텍스트 제외하고 순수 영화 텍스트만 추출
+                const items = Array.from(container.children).map(el => {
+                    const textNode = Array.from(el.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
+                    return textNode ? textNode.textContent.trim() : el.innerText.replace('×', '').trim();
+                });
+                state[tier] = items;
+            });
+            localStorage.setItem('tierState', JSON.stringify(state));
+        }
+        
+        // 상태 불러오기
+        function loadState() {
+            const saved = localStorage.getItem('tierState');
+            if (saved) {
+                const state = JSON.parse(saved);
+                let allSavedMovies = [];
+                
+                for (const tier in state) {
+                    const container = document.querySelector(`.tier-items[data-tier="${tier}"]`);
+                    if (container) {
+                        state[tier].forEach(movieName => {
+                            if(movieName) {
+                                container.appendChild(createCard(movieName));
+                                allSavedMovies.push(movieName);
+                            }
+                        });
+                    }
+                }
+                
+                // 기존 기본 영화 중 없는 것만 추가
+                const pool = document.querySelector(`.tier-items[data-tier="POOL"]`);
+                defaultMovies.forEach(movie => {
+                    if (!allSavedMovies.includes(movie)) {
+                        pool.appendChild(createCard(movie));
+                    }
+                });
+            } else {
+                const pool = document.querySelector(`.tier-items[data-tier="POOL"]`);
+                defaultMovies.forEach(movie => pool.appendChild(createCard(movie)));
+            }
+        }
+        
+        // 영화 카드 생성
+        function createCard(text) {
+            const div = document.createElement('div');
+            div.className = 'movie-card';
+            div.draggable = true;
+            
+            // 영화 제목 텍스트 노드
+            div.appendChild(document.createTextNode(text));
+            
+            // 명시적인 'X' 삭제 버튼 추가
+            const delBtn = document.createElement('div');
+            delBtn.className = 'delete-btn';
+            delBtn.innerHTML = '&times;';
+            delBtn.title = '이 영화 삭제하기';
+            
+            // 삭제 버튼 클릭 이벤트
+            delBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // 드래그 등 다른 이벤트 방지
+                div.remove();
+                saveState();
+            });
+            
+            div.appendChild(delBtn);
+            
+            div.addEventListener('dragstart', e => {
+                setTimeout(() => {
+                    div.classList.add('dragging');
+                    document.getElementById('trash-zone').style.display = 'block';
+                }, 0);
+            });
+            
+            div.addEventListener('dragend', () => {
+                div.classList.remove('dragging');
+                document.getElementById('trash-zone').style.display = 'none';
+                saveState();
+            });
+            
+            return div;
+        }
+        
+        // 새로운 영화 추가 로직
+        function addNewMovie() {
+            const input = document.getElementById('new-movie-input');
+            const title = input.value.trim();
+            if (title) {
+                const pool = document.querySelector('.tier-items[data-tier="POOL"]');
+                pool.appendChild(createCard(title));
+                saveState();
+                input.value = '';
+                input.focus();
+            }
+        }
+
+        document.getElementById('add-movie-btn').addEventListener('click', addNewMovie);
+        document.getElementById('new-movie-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') addNewMovie();
+        });
+        
+        // 드롭 영역 설정
+        document.querySelectorAll('.tier-items').forEach(zone => {
+            zone.addEventListener('dragover', e => {
+                e.preventDefault();
+                zone.classList.add('drag-over');
+            });
+            zone.addEventListener('dragleave', () => {
+                zone.classList.remove('drag-over');
+            });
+            zone.addEventListener('drop', e => {
+                e.preventDefault();
+                zone.classList.remove('drag-over');
+                const dragging = document.querySelector('.dragging');
+                if (dragging) {
+                    zone.appendChild(dragging);
+                    saveState();
+                }
+            });
+        });
+
+        // 휴지통(드래그) 영역 설정
+        const trashZone = document.getElementById('trash-zone');
+        trashZone.addEventListener('dragover', e => {
+            e.preventDefault();
+            trashZone.classList.add('drag-over');
+        });
+        trashZone.addEventListener('dragleave', () => {
+            trashZone.classList.remove('drag-over');
+        });
+        trashZone.addEventListener('drop', e => {
+            e.preventDefault();
+            trashZone.classList.remove('drag-over');
+            const dragging = document.querySelector('.dragging');
+            if (dragging) {
+                dragging.remove();
+                saveState();
+            }
+        });
+        
+        // 이벤트 리스너 연결
+        document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+        
+        // 이미지 캡처 전/후 처리 (삭제 버튼이 안 보이게 캡처)
+        document.getElementById('download-btn').addEventListener('click', () => {
+            const btn = document.getElementById('download-btn');
+            const originalText = btn.innerText;
+            btn.innerText = '저장 중...';
+            
+            // 캡처 시 삭제 버튼이 보이지 않도록 잠시 숨김 처리
+            const deleteBtns = document.querySelectorAll('.delete-btn');
+            deleteBtns.forEach(b => b.style.display = 'none');
+            
+            const captureArea = document.getElementById('capture-area');
+            
+            html2canvas(captureArea, {
+                backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--bg-color').trim(),
+                scale: 2 // 고화질
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = 'movie-tier-list.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+                
+                // 원상복구
+                btn.innerText = originalText;
+                deleteBtns.forEach(b => b.style.display = 'flex');
+            });
+        });
+        
+        // 실행
+        initTheme();
+        loadState();
+    </script>
+</body>
+</html>
